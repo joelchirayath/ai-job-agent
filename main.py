@@ -7,6 +7,8 @@ from modules.db_handler import init_db, insert_or_update, fetch_all
 from modules.ai_classifier import classify_reply
 import sqlite3
 
+DB_PATH = "emails.db"
+
 subject = "Test Email from AI Agent"
 body = "Hello, this is an automated email from my AI job outreach agent."
 
@@ -24,7 +26,7 @@ for row in companies:
     print(f"Sending email to {row['company']} ({row['email']})")
     send_email(row["email"], subject, body)
     print(f"Email sent to {row['email']}")
-    # Insert initial row with pending status
+    # Insert initial row with sent status
     insert_or_update(row['company'], row['email'], status="sent")
 
 # ---------------- READ REPLIES ----------------
@@ -49,12 +51,11 @@ for e in emails:
                 reply_body=body_text
             )
 
-DB_PATH = "emails.db"
-
+# ---------------- CLASSIFY NEW REPLIES ----------------
 def classify_new_replies():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, reply_content FROM emails WHERE status='replied' AND ai_classification IS NULL")
+    cursor.execute("SELECT id, reply_body FROM company_emails WHERE status='replied' AND ai_classification IS NULL")
     rows = cursor.fetchall()
 
     for row in rows:
@@ -62,13 +63,16 @@ def classify_new_replies():
         if reply:
             classification = classify_reply(reply)
             cursor.execute(
-                "UPDATE emails SET ai_classification=? WHERE id=?",
+                "UPDATE company_emails SET ai_classification=? WHERE id=?",
                 (classification, id_)
             )
             print(f"AI classified reply {id_} as: {classification}")
 
     conn.commit()
     conn.close()
+
+# Call classification for any new replies
+classify_new_replies()
 
 # ---------------- SHOW DATABASE ----------------
 print("All entries in database:")
