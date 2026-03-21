@@ -1,24 +1,53 @@
-import csv
+# main.py
+import time
 from modules.email_sender import send_email
+from modules.ai_gemini import classify_text
+from modules.email_reader_gmail import fetch_unread_emails_gmail
+from modules.db_handler import init_db, insert_or_update, fetch_all
 
 subject = "Test Email from AI Agent"
 body = "Hello, this is an automated email from my AI job outreach agent."
 
-rows = []
+# Initialize DB
+init_db()
 
-# Read CSV and send emails
-with open("data.csv", newline="") as file:
-    reader = csv.DictReader(file)
-    for row in reader:
-        if row["status"] == "pending":
-            print(f"Sending email to {row['company']} ({row['email']})")
-            send_email(row["email"], subject, body)
-            row["status"] = "sent"
-        rows.append(row)
+# Load companies from a CSV or manually for now
+companies = [
+    {"company": "testcompany1", "email": "mariagonzalez.oviedohospital@gmail.com"},
+    {"company": "testcompany2", "email": "hospital.oviedo12@gmail.com"}
+]
 
-# Write updated statuses back to CSV
-with open("data.csv", "w", newline="") as file:
-    fieldnames = ["company", "email", "status"]
-    writer = csv.DictWriter(file, fieldnames=fieldnames)
-    writer.writeheader()
-    writer.writerows(rows)
+# ---------------- SEND EMAILS ----------------
+for row in companies:
+    print(f"Sending email to {row['company']} ({row['email']})")
+    send_email(row["email"], subject, body)
+    print(f"Email sent to {row['email']}")
+    # Insert initial row with pending status
+    insert_or_update(row['company'], row['email'], status="sent")
+
+# ---------------- READ REPLIES ----------------
+emails = fetch_unread_emails_gmail()
+print(f"Fetched {len(emails)} unread replies.")
+
+for e in emails:
+    from_email = e["from"]
+    subject_line = e["subject"]
+    body_text = e["body"]
+    # Match reply to company
+    for row in companies:
+        if row["email"].lower() in from_email.lower():
+            classification = classify_text(body_text)
+            print(f"AI classified reply from {from_email} as: {classification}")
+            insert_or_update(
+                row["company"],
+                row["email"],
+                status="replied",
+                ai_classification=classification,
+                reply_subject=subject_line,
+                reply_body=body_text
+            )
+
+# ---------------- SHOW DATABASE ----------------
+print("All entries in database:")
+for r in fetch_all():
+    print(r)
