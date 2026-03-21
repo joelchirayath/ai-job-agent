@@ -1,53 +1,51 @@
 import imaplib
 import email
-from dotenv import load_dotenv
-import os
-import socket
+from email.header import decode_header
+import sqlite3
 
-load_dotenv()
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASS = os.getenv("EMAIL_PASS")
+DB_PATH = "emails.db"  # your database file
 
-def fetch_unread_emails():
-    emails = []
-    try:
-        # Set a socket timeout so it doesn't hang
-        socket.setdefaulttimeout(10)
+def fetch_unread_replies():
+    # Connect to Gmail
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login("your_email@gmail.com", "YOUR_APP_PASSWORD_OR_TOKEN")
+    mail.select("inbox")
 
-        # Connect to Gmail IMAP
-        mail = imaplib.IMAP4_SSL("imap.gmail.com")
-        mail.login(EMAIL_USER, EMAIL_PASS)
-        mail.select("inbox")
+    # Search for unread emails
+    status, messages = mail.search(None, '(UNSEEN)')
+    unread_emails = messages[0].split()
+    print(f"Fetched {len(unread_emails)} unread replies.")
 
-        # Search unread emails
-        status, messages = mail.search(None, 'UNSEEN')
-        if status != "OK":
-            print("No messages found or search failed.")
-            return emails
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-        email_ids = messages[0].split()
-        if not email_ids:
-            print("No unread emails.")
-            return emails
+    for e_id in unread_emails:
+        _, msg_data = mail.fetch(e_id, "(RFC822)")
+        for response_part in msg_data:
+            if isinstance(response_part, tuple):
+                msg = email.message_from_bytes(response_part[1])
+                subject, encoding = decode_header(msg["Subject"])[0]
+                if isinstance(subject, bytes):
+                    subject = subject.decode(encoding if encoding else "utf-8")
+                from_ = msg.get("From")
+                # Extract email address
+                email_addr = from_.split("<")[-1].replace(">", "").strip()
 
-        for e_id in email_ids:
-            _, msg_data = mail.fetch(e_id, "(RFC822)")
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
-                    subject = msg["subject"]
-                    from_ = msg["from"]
-                    body = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode(errors="ignore")
-                    else:
-                        body = msg.get_payload(decode=True).decode(errors="ignore")
-                    emails.append({"from": from_, "subject": subject, "body": body})
+                # Extract body
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            body = part.get_payload(decode=True).decode()
+                            break
+                else:
+                    body = msg.get_payload(decode=True).decode()
 
-        mail.logout()
-    except Exception as e:
-        print(f"Error fetching emails: {e}")
+                # Update database with reply content
+                cursor.execute(
+                    "UPDATE emails SET reply_content=?, status='replied' WHERE email=?",
+                    (body, email_addr)
+                )
 
-    return emails
+    conn.commit()
+    conn.close()
+    mail.logout()

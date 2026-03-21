@@ -4,6 +4,8 @@ from modules.email_sender import send_email
 from modules.ai_gemini import classify_text
 from modules.email_reader_gmail import fetch_unread_emails_gmail
 from modules.db_handler import init_db, insert_or_update, fetch_all
+from modules.ai_classifier import classify_reply
+import sqlite3
 
 subject = "Test Email from AI Agent"
 body = "Hello, this is an automated email from my AI job outreach agent."
@@ -46,6 +48,27 @@ for e in emails:
                 reply_subject=subject_line,
                 reply_body=body_text
             )
+
+DB_PATH = "emails.db"
+
+def classify_new_replies():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, reply_content FROM emails WHERE status='replied' AND ai_classification IS NULL")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        id_, reply = row
+        if reply:
+            classification = classify_reply(reply)
+            cursor.execute(
+                "UPDATE emails SET ai_classification=? WHERE id=?",
+                (classification, id_)
+            )
+            print(f"AI classified reply {id_} as: {classification}")
+
+    conn.commit()
+    conn.close()
 
 # ---------------- SHOW DATABASE ----------------
 print("All entries in database:")
