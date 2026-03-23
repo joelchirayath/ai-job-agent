@@ -6,6 +6,7 @@ from modules.email_reader_gmail import fetch_unread_emails_gmail
 from modules.db_handler import init_db, insert_or_update, fetch_all, fetch_prioritized
 from modules.ai_classifier import classify_reply
 from modules.auto_responder import send_auto_responses
+import csv
 
 subject = "Test Email from AI Agent"
 body = "Hello, this is an automated email from my AI job outreach agent."
@@ -14,10 +15,11 @@ body = "Hello, this is an automated email from my AI job outreach agent."
 init_db()
 
 # ---------------- TEST COMPANIES ----------------
-companies = [
-    {"company": "testcompany1", "email": "mariagonzalez.oviedohospital@gmail.com"},
-    {"company": "testcompany2", "email": "hospital.oviedo12@gmail.com"}
-]
+companies = []
+with open("data.csv", newline='') as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        companies.append({"company": row["company"], "email": row["email"]})
 
 # ---------------- SEND EMAILS ----------------
 print("\n📤 SENDING EMAILS...\n")
