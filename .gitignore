@@ -5,4 +5,5 @@ __pycache__/
 token.json
 emails.db
 credentials.json
+data.csv
 
